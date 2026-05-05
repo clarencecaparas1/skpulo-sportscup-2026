@@ -395,25 +395,46 @@ select option{background:var(--surface2)}
 <div class="toast" id="toast"></div>
 
 <script>
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDyGm8ejXNBGBLFrMUtEbMWTyQFijSyv9A",
+    authDomain: "skpulo-sportscup.firebaseapp.com",
+    projectId: "skpulo-sportscup",
+    storageBucket: "skpulo-sportscup.firebasestorage.app",
+    messagingSenderId: "835216884104",
+    appId: "1:835216884104:web:141b9d840f9c6b8283fa3d",
+    measurementId: "G-SRBPLW0CME"
+  };
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+function listenGames(){
+  db.collection("games").onSnapshot(snapshot=>{
+    games = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderGames();
+    refreshAdminGameList();
+    refreshGameSelect();
+    updateStats();
+  });
+}
+
+function listenBrackets(){
+  db.collection("brackets").onSnapshot(snapshot=>{
+    brackets = {};
+    snapshot.forEach(doc=>{
+      brackets[doc.id.replace("_","|")] = doc.data().brackets;
+    });
+    renderStandingTabs();
+  });
+}
+
 const ADMIN_USER='skpulo',ADMIN_PASS='pulo2026';
 let isAdmin=false,activeFilter='all';
 
-let brackets={
-  'Basketball|Senior':['Bracket A','Bracket B','Bracket C','Bracket D','Bracket E'],
-  'Basketball|Junior':['Bracket A','Bracket B','Bracket C','Bracket D'],
-  'Basketball|Midget':['Bracket A','Bracket B','Bracket C','Bracket D'],
-  'Basketball|Mosquito':['Bracket A','Bracket B','Bracket C','Bracket D','Bracket E','Bracket F'],
-  'Volleyball|Female':['Group 1','Group 2'],
-  'Volleyball|Male':['Group 1','Group 2']
-};
+let brackets={};
 
-let games=[
-  {id:1,sport:'Basketball',division:'Senior',bracket:'Bracket A',date:'2026-05-10',time:'08:00',team1:'Pulo Ballers',team2:'Tagumpay FC',venue:'Pulo Basketball Court',gamenum:'Game 1',status:'upcoming',score1:null,score2:null,potg:null},
-  {id:2,sport:'Basketball',division:'Junior',bracket:'Bracket A',date:'2026-05-10',time:'10:00',team1:'Young Guns',team2:'Sky High',venue:'Pulo Basketball Court',gamenum:'Game 2',status:'upcoming',score1:null,score2:null,potg:null},
-  {id:3,sport:'Volleyball',division:'Female',bracket:'Group 1',date:'2026-05-11',time:'14:00',team1:'Pulo Aces',team2:'Fire Spikers',venue:'Pulo Covered Court',gamenum:'Game 1',status:'upcoming',score1:null,score2:null,potg:null},
-  {id:4,sport:'Volleyball',division:'Male',bracket:'Group 1',date:'2026-05-11',time:'16:00',team1:'Thunder Block',team2:'Net Crushers',venue:'Pulo Covered Court',gamenum:'Game 2',status:'upcoming',score1:null,score2:null,potg:null},
-  {id:5,sport:'Basketball',division:'Mosquito',bracket:'Bracket A',date:'2026-05-09',time:'08:00',team1:'Mini Stars',team2:'Little Dunkers',venue:'Pulo Basketball Court',gamenum:'Game 1',status:'done',score1:48,score2:35,potg:{name:'Juan dela Cruz',team:'Mini Stars'}}
-];
+let games=[];
 
 function bkey(sport,division){return sport+'|'+division}
 function getDivisions(sport){return sport==='Volleyball'?['Female','Male']:['Senior','Junior','Midget','Mosquito']}
@@ -534,42 +555,52 @@ function fmtDate(d){if(!d)return'';const dt=new Date(d+'T00:00');return dt.toLoc
 function fmtTime(t){if(!t)return'';const[h,m]=t.split(':');const hr=parseInt(h);return(hr%12||12)+':'+m+' '+(hr<12?'AM':'PM')}
 
 function addGame(){
-  const sport=document.getElementById('f-sport').value;
-  const division=document.getElementById('f-division').value;
-  const bracket=document.getElementById('f-bracket').value;
-  const date=document.getElementById('f-date').value;
-  const time=document.getElementById('f-time').value;
-  const team1=document.getElementById('f-team1').value.trim();
-  const team2=document.getElementById('f-team2').value.trim();
-  const venue=document.getElementById('f-venue').value.trim();
-  const gamenum=document.getElementById('f-gamenum').value.trim();
-  if(!team1||!team2||!date){showToast('⚠ Fill in teams and date.');return}
-  games.push({id:Date.now(),sport,division,bracket,date,time,team1,team2,venue,gamenum,status:'upcoming',score1:null,score2:null,potg:null});
-  renderGames();refreshAdminGameList();refreshGameSelect();updateStats();
-  document.getElementById('f-team1').value='';document.getElementById('f-team2').value='';document.getElementById('f-gamenum').value='';
+  const sport = document.getElementById('f-sport').value;
+  const division = document.getElementById('f-division').value;
+  const bracket = document.getElementById('f-bracket').value;
+  const date = document.getElementById('f-date').value;
+  const time = document.getElementById('f-time').value;
+  const team1 = document.getElementById('f-team1').value.trim();
+  const team2 = document.getElementById('f-team2').value.trim();
+  const venue = document.getElementById('f-venue').value.trim();
+  const gamenum = document.getElementById('f-gamenum').value.trim();
+
+  if(!team1 || !team2 || !date){
+    showToast('⚠ Fill in teams and date.');
+    return;
+  }
+
+  db.collection("games").add({
+    sport, division, bracket, date, time,
+    team1, team2, venue, gamenum,
+    status: 'upcoming',
+    score1: null,
+    score2: null,
+    potg: null
+  });
+
   showToast('✓ Game added!');
 }
 
 function updateScore(){
-  const gameId=document.getElementById('f-game-select').value;
-  if(!gameId){showToast('⚠ Select a game.');return}
-  const game=games.find(g=>g.id==gameId);if(!game)return;
-  game.status=document.getElementById('f-status').value;
-  const bracket=document.getElementById('f-update-bracket').value;
-  if(bracket)game.bracket=bracket;
-  const s1=document.getElementById('f-score1').value;
-  const s2=document.getElementById('f-score2').value;
-  game.score1=s1!==''?parseInt(s1):null;
-  game.score2=s2!==''?parseInt(s2):null;
-  const pn=document.getElementById('f-potg-name').value.trim();
-  const pt=document.getElementById('f-potg-team').value.trim();
-  if(pn)game.potg={name:pn,team:pt};
-  renderGames();refreshAdminGameList();updateStats();showToast('✓ Game updated!');
+  const gameId = document.getElementById('f-game-select').value;
+  if(!gameId){
+    showToast('⚠ Select a game.');
+    return;
+  }
+
+  db.collection("games").doc(gameId).update({
+    status: document.getElementById('f-status').value,
+    bracket: document.getElementById('f-update-bracket').value || null,
+    score1: document.getElementById('f-score1').value || null,
+    score2: document.getElementById('f-score2').value || null
+  });
+
+  showToast('✓ Game updated!');
 }
 
 function deleteGame(id){
-  games=games.filter(g=>g.id!==id);
-  renderGames();refreshAdminGameList();refreshGameSelect();updateStats();showToast('Game removed.');
+  db.collection("games").doc(id).delete();
 }
 
 function filterGames(f,btn){
@@ -747,8 +778,10 @@ function updateStats(){
   document.getElementById('stat-potg').textContent=potgCount;
 }
 
-updateStats();
-renderGames();
+listenGames();
+listenBrackets();
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js">
 </script>
 </body>
 </html>
